@@ -14,7 +14,7 @@
   <div class="page">
     <header class="masthead">
       <h1>DNA Lab</h1>
-      <p class="lede">Breed fish and follow their genes down the generations. Every fish carries two copies of each gene, one from each parent, and shows a mix of what it carries.</p>
+      <p class="lede">Breed fish and follow their genes down the generations. Every fish has a blended body, swappable fins and its own colors, and carries two copies of every gene, one from each parent.</p>
     </header>
 
     <section class="tank-wrap" aria-label="Tank">
@@ -29,6 +29,11 @@
         <p class="count" id="tankCount"></p>
       </div>
       <ul class="roster" id="roster"></ul>
+      <details class="catalog">
+        <summary>Add fish from the catalog</summary>
+        <p class="hint" id="catalogNote"></p>
+        <ul class="roster" id="catalogList"></ul>
+      </details>
     </section>
 
     <main class="lab">
@@ -55,11 +60,13 @@
     <details class="how">
       <summary>How it works</summary>
       <div class="how-body">
-        <p><strong>One shared template.</strong> Every species is drawn on the same fish template: the same body points and the same fin points, lined up by landmarks such as fin starts, fin ends and tail tips. Because the points match, any mix of species is just a weighted average of matching points.</p>
-        <p><strong>Shape genes.</strong> Each body region (body, dorsal fin, anal fin, tail, side fins) has one gene. A copy of that gene is a recipe like “60% clownfish, 40% betta”. A fish shows the average of its two copies, keeping only the four strongest species.</p>
-        <p><strong>Trait genes.</strong> Colors and patterns are on-or-off genes with dominant and recessive versions. A dominant copy hides a recessive one, so a fish can carry a trait it doesn’t show. Patterns are switched on as layers rather than averaged, so colors never turn muddy.</p>
-        <p><strong>Inheritance.</strong> For every gene, each parent passes on one of its two copies at random. That’s why siblings differ and hidden traits can come back. Crossing two pure species gives near-identical babies, because each one gets the same pair of copies; breed those babies with each other to see real variety. Both starting angelfish secretly carry albino, and the betta secretly carries spots.</p>
-        <p><strong>Mutation.</strong> Now and then a copy changes: a shape recipe drifts toward a random species, or a trait copy flips. Changed copies are marked “new” in the genome sheet.</p>
+        <p>Every fish is built in three layers, each controlled by its own genes. Every gene comes in two copies, one from each parent.</p>
+        <p><strong>A shared body.</strong> All 13 species are drawn on the same body template, with the same points in the same order. That lets a body be a blend: a copy of the body gene is a recipe like “60% clownfish, 40% koi”, and the fish shows the average of its two copies, keeping the four strongest species.</p>
+        <p><strong>Fins as swappable parts.</strong> Each fin slot (dorsal, tail, anal, side and belly fins) takes a part from a library: forked, fan, flowing, sword, spiky, sail and more. The dominant part type shows, and its shape and size are the average of both copies, so a flowing tail can be a modest veil or a grand one. Parts attach to sockets that ride the body as it blends, and they scale to fit it.</p>
+        <p><strong>Extras.</strong> A tail spine, whiskers, a head hump and an anglerfish lure are built into every fish’s template and only appear when their gene calls for them.</p>
+        <p><strong>Color and pattern.</strong> Colors and patterns are dominant or recessive genes, switched on as layers rather than averaged, so colors never turn muddy. A dominant copy can hide a recessive one, so a fish can carry a trait it doesn’t show.</p>
+        <p><strong>Inheritance and mutation.</strong> For every gene, each parent passes on one of its two copies at random, so siblings differ and hidden traits come back. Crossing two pure species gives near-identical babies; breed those babies with each other to see real variety. Now and then a copy mutates, and the genome sheet marks it “new”.</p>
+        <p><strong>Hidden carriers to find.</strong> Angelfish carry albino, the betta carries spots, and koi carry long flowing tails.</p>
       </div>
     </details>
 

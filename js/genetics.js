@@ -1,45 +1,66 @@
-import { SPECIES, REGIONS, TRAITS, FOUNDERS } from './species.js';
+import { SPECIES, SLOTS, PARTS, TRAITS, DEFAULT_TRAITS } from './species.js';
 
 const NS = SPECIES.length;
-const TOP_K = 4; // like skin weights: keep the four strongest influences
+const TOP_K = 4; // like skin weights: keep the four strongest influences on the body
 
-export const speciesIndex = id => SPECIES.findIndex(s => s.id === id);
+export const speciesById = id => SPECIES.find(s => s.id === id);
+const speciesIndex = id => SPECIES.findIndex(s => s.id === id);
 const oneHot = i => SPECIES.map((_, j) => (j === i ? 1 : 0));
 const clone = o => JSON.parse(JSON.stringify(o));
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
-// ---------- genomes ----------
-// genome = {
-//   shape: { body: [allele, allele], dorsal: [...], ... }   allele = { w: [weights per species], m: mutated? }
-//   size:  [ { v, m }, { v, m } ]
-//   traits: { color: [ { v: 'orange', m }, { v: 'silver', m } ], ... }
-// }
-export function founderGenome(f) {
-  const si = speciesIndex(f.species);
-  const shape = {};
-  REGIONS.forEach(r => { shape[r.id] = [{ w: oneHot(si), m: false }, { w: oneHot(si), m: false }]; });
-  const sz = SPECIES[si].size;
+// ---------- genome ----------
+// {
+//   body:   [ {w: [weight per species], m}, {…} ]       base-body species mix, two copies
+//   size:   [ {v, m}, {v, m} ]                           overall size
+//   parts:  { slot: [ {type, shape, size, m}, {…} ] }    fin part per slot, two copies
+//   traits: { gene: [ {v, m}, {v, m} ] }                 color, patterns and extras
+// }  m = changed by mutation
+export function speciesGenome(speciesId) {
+  const sp = speciesById(speciesId);
+  const si = speciesIndex(speciesId);
+  const parts = {};
+  SLOTS.forEach(s => {
+    const [type, shape, size] = sp.parts[s.id];
+    const copy = () => ({ type, shape, size, m: false });
+    const hidden = sp.hiddenParts && sp.hiddenParts[s.id];
+    parts[s.id] = [copy(), hidden ? { type: hidden, shape, size, m: false } : copy()];
+  });
   const traits = {};
-  TRAITS.forEach(t => { traits[t.id] = f.traits[t.id].map(v => ({ v, m: false })); });
-  return { shape, size: [{ v: sz, m: false }, { v: sz, m: false }], traits };
-}
-
-export function founders() {
-  return FOUNDERS.map((f, i) => ({ id: i + 1, name: f.name, gen: 1, parents: null, genome: founderGenome(f) }));
+  TRAITS.forEach(t => {
+    const pair = (sp.traits && sp.traits[t.id]) || DEFAULT_TRAITS[t.id];
+    traits[t.id] = pair.map(v => ({ v, m: false }));
+  });
+  return {
+    body: [{ w: oneHot(si), m: false }, { w: oneHot(si), m: false }],
+    size: [{ v: sp.size, m: false }, { v: sp.size, m: false }],
+    parts, traits
+  };
 }
 
 // ---------- expression ----------
 export function normalizeTopK(w) {
-  const idx = w.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]);
-  const keep = new Set(idx.slice(0, TOP_K).map(p => p[1]));
+  const order = w.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]);
+  const keep = new Set(order.slice(0, TOP_K).map(p => p[1]));
   const out = w.map((v, i) => (keep.has(i) ? Math.max(0, v) : 0));
   const sum = out.reduce((a, b) => a + b, 0) || 1;
   return out.map(v => v / sum);
 }
 
-export function expressShape(pair) {
-  // what you see is the average of the two copies
-  return normalizeTopK(pair[0].w.map((v, i) => (v + pair[1].w[i]) / 2));
+export const expressBody = pair => normalizeTopK(pair[0].w.map((v, i) => (v + pair[1].w[i]) / 2));
+
+// Part: the dominant type is shown; shape and size are the average of both copies.
+export function expressPart(slot, pair) {
+  const lib = PARTS[slot];
+  const [a, b] = pair;
+  const type = lib[a.type].rank >= lib[b.type].rank ? a.type : b.type;
+  return { type, shape: (a.shape + b.shape) / 2, size: (a.size + b.size) / 2 };
+}
+export function hiddenPart(slot, pair) {
+  const shown = expressPart(slot, pair).type;
+  const other = pair.find(p => p.type !== shown);
+  return other ? other.type : null;
 }
 
 export function expressTrait(geneId, pair) {
@@ -47,8 +68,7 @@ export function expressTrait(geneId, pair) {
   const [a, b] = pair.map(p => p.v);
   return gene.alleles[a].rank >= gene.alleles[b].rank ? a : b;
 }
-
-// A trait that is carried but not shown, if any. "Absence" alleles (quiet) don't count.
+// A trait that is carried but not shown. "Absence" alleles (quiet) don't count.
 export function hiddenAllele(geneId, pair) {
   const gene = TRAITS.find(t => t.id === geneId);
   const shown = expressTrait(geneId, pair);
@@ -56,59 +76,61 @@ export function hiddenAllele(geneId, pair) {
   return other && !gene.alleles[other.v].quiet ? other.v : null;
 }
 
-export function phenotype(genome) {
-  const shape = {};
-  REGIONS.forEach(r => { shape[r.id] = expressShape(genome.shape[r.id]); });
+export function phenotype(g) {
+  const parts = {};
+  SLOTS.forEach(s => { parts[s.id] = expressPart(s.id, g.parts[s.id]); });
   const traits = {};
-  TRAITS.forEach(t => { traits[t.id] = expressTrait(t.id, genome.traits[t.id]); });
-  const size = (genome.size[0].v + genome.size[1].v) / 2;
-  return { shape, traits, size };
-}
-
-// Overall ancestry: average of the expressed region mixes.
-export function ancestry(genome) {
-  const tot = new Array(NS).fill(0);
-  REGIONS.forEach(r => { expressShape(genome.shape[r.id]).forEach((v, i) => { tot[i] += v / REGIONS.length; }); });
-  return tot;
+  TRAITS.forEach(t => { traits[t.id] = expressTrait(t.id, g.traits[t.id]); });
+  return { body: expressBody(g.body), size: (g.size[0].v + g.size[1].v) / 2, parts, traits };
 }
 
 // ---------- inheritance ----------
-// Each parent passes on ONE of its two copies of every gene, chosen at random.
-// That is what keeps variety alive across generations: siblings differ,
-// and hidden (recessive) copies can resurface in grandchildren.
-function mutateShape(allele, rate) {
-  if (Math.random() >= rate) return allele;
+// Every gene: each parent passes on ONE of its two copies at random.
+// Siblings differ, hidden (recessive) copies resurface, and hybrids breed with hybrids.
+function mutateBody(c, rate) {
+  if (Math.random() >= rate) return c;
   const target = Math.floor(Math.random() * NS);
   const m = 0.1 + Math.random() * 0.15;
-  const w = allele.w.map((v, i) => v * (1 - m) + (i === target ? m : 0));
-  return { w, m: true };
+  return { w: c.w.map((v, i) => v * (1 - m) + (i === target ? m : 0)), m: true };
 }
-
-function mutateSize(allele, rate) {
-  let v = allele.v + (Math.random() - 0.5) * 0.04;
-  let m = allele.m;
+function mutateSize(c, rate) {
+  let v = c.v + (Math.random() - 0.5) * 0.04, m = c.m;
   if (Math.random() < rate) { v += (Math.random() - 0.5) * 0.18; m = true; }
-  return { v: Math.min(1.3, Math.max(0.65, v)), m };
+  return { v: clamp(v, 0.6, 1.4), m };
 }
-
-function mutateTrait(geneId, allele, rate) {
-  if (Math.random() >= rate / 2) return allele;
+function mutatePart(slot, c, rate) {
+  if (Math.random() >= rate) return c;
+  const r = Math.random();
+  if (r < 0.34) {
+    const types = Object.keys(PARTS[slot]).filter(t => t !== c.type);
+    return { ...c, type: pick(types), m: true };
+  }
+  if (r < 0.67) return { ...c, shape: clamp(c.shape + (Math.random() - 0.5) * 0.6, 0, 1), m: true };
+  return { ...c, size: clamp(c.size + (Math.random() - 0.5) * 0.4, 0, 1.5), m: true };
+}
+function mutateTrait(geneId, c, rate) {
+  if (Math.random() >= rate / 2) return c;
   const gene = TRAITS.find(t => t.id === geneId);
-  const options = Object.keys(gene.alleles).filter(k => k !== allele.v);
-  return { v: pick(options), m: true };
+  return { v: pick(Object.keys(gene.alleles).filter(k => k !== c.v)), m: true };
 }
 
-export function breed(parentA, parentB, rate) {
-  const ga = parentA.genome, gb = parentB.genome;
-  const fresh = a => ({ ...clone(a), m: false });
-  const shape = {};
-  REGIONS.forEach(r => {
-    shape[r.id] = [mutateShape(fresh(pick(ga.shape[r.id])), rate), mutateShape(fresh(pick(gb.shape[r.id])), rate)];
+export function breed(pa, pb, rate) {
+  const A = pa.genome, B = pb.genome;
+  const take = pair => ({ ...clone(pick(pair)), m: false });
+  const parts = {};
+  SLOTS.forEach(s => {
+    parts[s.id] = [mutatePart(s.id, take(A.parts[s.id]), rate), mutatePart(s.id, take(B.parts[s.id]), rate)];
   });
-  const size = [mutateSize(fresh(pick(ga.size)), rate), mutateSize(fresh(pick(gb.size)), rate)];
   const traits = {};
   TRAITS.forEach(t => {
-    traits[t.id] = [mutateTrait(t.id, fresh(pick(ga.traits[t.id])), rate), mutateTrait(t.id, fresh(pick(gb.traits[t.id])), rate)];
+    traits[t.id] = [mutateTrait(t.id, take(A.traits[t.id]), rate), mutateTrait(t.id, take(B.traits[t.id]), rate)];
   });
-  return { shape, size, traits };
+  return {
+    body: [mutateBody(take(A.body), rate), mutateBody(take(B.body), rate)],
+    size: [mutateSize(take(A.size), rate), mutateSize(take(B.size), rate)],
+    parts, traits
+  };
 }
+
+// Overall ancestry, from the body mix.
+export const ancestry = g => expressBody(g.body);
